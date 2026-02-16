@@ -1,0 +1,1725 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Obsidian Knowledge Graph</title>
+  <script src="https://d3js.org/d3.v7.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-primary: #0a0a0f;
+      --bg-secondary: #12121a;
+      --bg-card: #1a1a2e;
+      --bg-card-hover: #22223a;
+      --border: #2a2a42;
+      --text-primary: #e8e8f0;
+      --text-secondary: #9090a8;
+      --text-dim: #606078;
+      --accent: #7c5cfc;
+      --accent-glow: rgba(124, 92, 252, 0.3);
+      --accent-soft: #6448d4;
+      --green: #34d399;
+      --amber: #fbbf24;
+      --rose: #fb7185;
+      --cyan: #22d3ee;
+      --radius: 12px;
+      --shadow: 0 4px 24px rgba(0, 0, 0, 0.4);
+    }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+      overflow-x: hidden;
+    }
+
+    /* ── Header ─────────────────────────────────── */
+    .header {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(10, 10, 15, 0.85);
+      backdrop-filter: blur(20px);
+      border-bottom: 1px solid var(--border);
+      padding: 14px 28px;
+      display: flex;
+      align-items: center;
+      gap: 20px;
+    }
+
+    .logo {
+      font-size: 18px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--accent), var(--cyan));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      white-space: nowrap;
+    }
+
+    .logo span {
+      font-weight: 300;
+      opacity: 0.7;
+    }
+
+    .search-box {
+      flex: 1;
+      max-width: 500px;
+      position: relative;
+    }
+
+    .search-box input {
+      width: 100%;
+      padding: 9px 14px 9px 38px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: inherit;
+      transition: all 0.2s;
+    }
+
+    .search-box input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .search-box input::placeholder {
+      color: var(--text-dim);
+    }
+
+    .search-icon {
+      position: absolute;
+      left: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-dim);
+      font-size: 14px;
+    }
+
+    .mode-toggle {
+      display: flex;
+      gap: 4px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 3px;
+    }
+
+    .mode-btn {
+      padding: 6px 14px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+      color: var(--text-dim);
+      cursor: pointer;
+      border: none;
+      background: none;
+      transition: all 0.15s;
+    }
+
+    .mode-btn:hover {
+      color: var(--text-secondary);
+    }
+
+    .mode-btn.active {
+      background: var(--accent);
+      color: white;
+    }
+
+    /* ── Layout ──────────────────────────────────── */
+    .main {
+      display: grid;
+      grid-template-columns: 1fr 400px;
+      grid-template-rows: auto 1fr;
+      gap: 0;
+      height: calc(100vh - 56px);
+    }
+
+    /* ── Stats Bar ───────────────────────────────── */
+    .stats-bar {
+      grid-column: 1 / -1;
+      display: flex;
+      gap: 12px;
+      padding: 16px 28px;
+      overflow-x: auto;
+    }
+
+    .stat-card {
+      flex: 0 0 auto;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 20px;
+      min-width: 140px;
+      transition: all 0.2s;
+    }
+
+    .stat-card:hover {
+      border-color: var(--accent);
+      transform: translateY(-2px);
+      box-shadow: var(--shadow);
+    }
+
+    .stat-label {
+      font-size: 10px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 2px;
+    }
+
+    .stat-value {
+      font-size: 24px;
+      font-weight: 700;
+      background: linear-gradient(135deg, var(--text-primary), var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .stat-value.green {
+      background: linear-gradient(135deg, var(--green), #6ee7b7);
+      -webkit-background-clip: text;
+    }
+
+    .stat-value.amber {
+      background: linear-gradient(135deg, var(--amber), #fde68a);
+      -webkit-background-clip: text;
+    }
+
+    .stat-value.cyan {
+      background: linear-gradient(135deg, var(--cyan), #67e8f9);
+      -webkit-background-clip: text;
+    }
+
+    .stat-value.rose {
+      background: linear-gradient(135deg, var(--rose), #fda4af);
+      -webkit-background-clip: text;
+    }
+
+    /* ── Graph Area ──────────────────────────────── */
+    .graph-area {
+      position: relative;
+      background: var(--bg-secondary);
+      border-right: 1px solid var(--border);
+      overflow: hidden;
+    }
+
+    .graph-area svg {
+      width: 100%;
+      height: 100%;
+    }
+
+    .graph-controls {
+      position: absolute;
+      bottom: 16px;
+      left: 16px;
+      display: flex;
+      gap: 6px;
+    }
+
+    .graph-controls button {
+      width: 32px;
+      height: 32px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 16px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      transition: all 0.15s;
+    }
+
+    .graph-controls button:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+      border-color: var(--accent);
+    }
+
+    .tooltip {
+      position: absolute;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      max-width: 280px;
+      box-shadow: var(--shadow);
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity 0.15s;
+      z-index: 200;
+    }
+
+    .tooltip.visible {
+      opacity: 1;
+    }
+
+    .tooltip-name {
+      font-weight: 600;
+      font-size: 13px;
+      margin-bottom: 3px;
+      color: var(--accent);
+    }
+
+    .tooltip-summary {
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* ── Side Panel ──────────────────────────────── */
+    .side-panel {
+      display: flex;
+      flex-direction: column;
+      background: var(--bg-primary);
+      overflow: hidden;
+    }
+
+    .panel-tabs {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .panel-tab {
+      flex: 1;
+      padding: 10px;
+      text-align: center;
+      font-size: 11px;
+      font-weight: 500;
+      color: var(--text-dim);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: all 0.15s;
+    }
+
+    .panel-tab:hover {
+      color: var(--text-secondary);
+    }
+
+    .panel-tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    .panel-content {
+      flex: 1;
+      overflow-y: auto;
+      padding: 10px;
+    }
+
+    /* ── Chat UI ─────────────────────────────────── */
+    .chat-container {
+      display: flex;
+      flex-direction: column;
+      height: 100%;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 12px;
+    }
+
+    .chat-msg {
+      margin-bottom: 12px;
+      max-width: 95%;
+    }
+
+    .chat-msg.user {
+      margin-left: auto;
+    }
+
+    .chat-msg.user .chat-bubble {
+      background: var(--accent);
+      color: white;
+      border-radius: 12px 12px 4px 12px;
+    }
+
+    .chat-msg.ai .chat-bubble {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px 12px 12px 4px;
+    }
+
+    .chat-bubble {
+      padding: 10px 14px;
+      font-size: 13px;
+      line-height: 1.6;
+    }
+
+    .chat-bubble p {
+      margin-bottom: 6px;
+    }
+
+    .chat-bubble p:last-child {
+      margin-bottom: 0;
+    }
+
+    .chat-sources {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border);
+    }
+
+    .chat-source-tag {
+      display: inline-block;
+      font-size: 10px;
+      padding: 2px 8px;
+      margin: 2px 4px 2px 0;
+      background: rgba(124, 92, 252, 0.15);
+      color: var(--accent);
+      border-radius: 4px;
+      cursor: pointer;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+
+    .chat-source-tag:hover {
+      background: rgba(124, 92, 252, 0.3);
+    }
+
+    .chat-input-area {
+      padding: 12px;
+      border-top: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+
+    .chat-input-area input {
+      flex: 1;
+      padding: 10px 14px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 13px;
+      font-family: inherit;
+    }
+
+    .chat-input-area input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .chat-input-area input::placeholder {
+      color: var(--text-dim);
+    }
+
+    .chat-send-btn {
+      padding: 0 16px;
+      background: var(--accent);
+      border: none;
+      border-radius: 8px;
+      color: white;
+      font-size: 14px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .chat-send-btn:hover {
+      background: var(--accent-soft);
+    }
+
+    .chat-send-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    /* ── Result cards ────────────────────────────── */
+    .result-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 12px 14px;
+      margin-bottom: 8px;
+      transition: all 0.15s;
+    }
+
+    .result-card:hover {
+      border-color: var(--accent);
+      background: var(--bg-card-hover);
+    }
+
+    .result-fact {
+      font-size: 13px;
+      line-height: 1.5;
+      color: var(--text-primary);
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+
+    .result-index {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      min-width: 20px;
+      background: var(--accent);
+      border-radius: 50%;
+      font-size: 10px;
+      font-weight: 600;
+      color: white;
+    }
+
+    .result-meta {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .result-source {
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .result-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      font-size: 11px;
+      padding: 3px 10px;
+      background: rgba(124, 92, 252, 0.12);
+      color: var(--accent);
+      border-radius: 6px;
+      text-decoration: none;
+      transition: all 0.15s;
+      cursor: pointer;
+    }
+
+    .result-link:hover {
+      background: rgba(124, 92, 252, 0.25);
+    }
+
+    /* ── Entity cards ────────────────────────────── */
+    .entity-card {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 10px 14px;
+      margin-bottom: 6px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .entity-card:hover {
+      border-color: var(--accent);
+      background: var(--bg-card-hover);
+    }
+
+    .entity-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent);
+      flex-shrink: 0;
+    }
+
+    .entity-name {
+      font-size: 13px;
+      font-weight: 500;
+      flex: 1;
+    }
+
+    .entity-connections {
+      font-size: 11px;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    /* Empty / loading states */
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: var(--text-dim);
+    }
+
+    .empty-state .icon {
+      font-size: 36px;
+      margin-bottom: 10px;
+    }
+
+    .empty-state p {
+      font-size: 13px;
+    }
+
+    .spinner {
+      display: inline-block;
+      width: 18px;
+      height: 18px;
+      border: 2px solid var(--border);
+      border-top-color: var(--accent);
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    /* Document preview modal */
+    .doc-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(8px);
+      z-index: 300;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s;
+    }
+
+    .doc-modal-overlay.visible {
+      opacity: 1;
+      pointer-events: auto;
+    }
+
+    .doc-modal {
+      background: var(--bg-secondary);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      width: 90%;
+      max-width: 720px;
+      max-height: 80vh;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 24px 80px rgba(0, 0, 0, 0.6);
+    }
+
+    .doc-modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .doc-modal-title {
+      font-size: 16px;
+      font-weight: 600;
+    }
+
+    .doc-modal-folder {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-left: 12px;
+    }
+
+    .doc-modal-close {
+      width: 32px;
+      height: 32px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-secondary);
+      font-size: 16px;
+      cursor: pointer;
+      transition: all 0.15s;
+    }
+
+    .doc-modal-close:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
+
+    .doc-modal-actions {
+      padding: 12px 20px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      gap: 8px;
+    }
+
+    .doc-modal-actions a {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 14px;
+      background: var(--accent);
+      color: white;
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      text-decoration: none;
+      transition: all 0.15s;
+    }
+
+    .doc-modal-actions a:hover {
+      background: var(--accent-soft);
+    }
+
+    .doc-modal-body {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px;
+    }
+
+    .doc-content {
+      font-size: 14px;
+      line-height: 1.7;
+      color: var(--text-secondary);
+      white-space: pre-wrap;
+      word-wrap: break-word;
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--border);
+      border-radius: 3px;
+    }
+
+    ::-webkit-scrollbar-thumb:hover {
+      background: var(--text-dim);
+    }
+
+    /* ── Settings / Ingestion UI ─────────────────── */
+    .settings-section {
+      margin-bottom: 20px;
+    }
+
+    .settings-section h3 {
+      font-size: 12px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      color: var(--text-dim);
+      margin-bottom: 10px;
+    }
+
+    .settings-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+
+    .settings-input {
+      flex: 1;
+      padding: 9px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 12px;
+      font-family: 'Inter', monospace;
+    }
+
+    .settings-input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px var(--accent-glow);
+    }
+
+    .settings-input[readonly] {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    .settings-btn {
+      padding: 8px 16px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 12px;
+      font-weight: 500;
+      cursor: pointer;
+      transition: all 0.15s;
+      font-family: inherit;
+    }
+
+    .settings-btn.primary {
+      background: var(--accent);
+      border-color: var(--accent);
+      color: white;
+    }
+
+    .settings-btn.primary:hover {
+      background: var(--accent-soft);
+    }
+
+    .settings-btn.danger {
+      background: rgba(251, 113, 133, 0.15);
+      border-color: var(--rose);
+      color: var(--rose);
+    }
+
+    .settings-btn.danger:hover {
+      background: rgba(251, 113, 133, 0.3);
+    }
+
+    .settings-btn.secondary {
+      background: var(--bg-card);
+      color: var(--text-secondary);
+    }
+
+    .settings-btn.secondary:hover {
+      background: var(--bg-card-hover);
+      color: var(--text-primary);
+    }
+
+    .settings-btn:disabled {
+      opacity: 0.4;
+      cursor: not-allowed;
+    }
+
+    .vault-info {
+      font-size: 12px;
+      color: var(--text-dim);
+      margin-top: 6px;
+    }
+
+    .vault-info .vault-stat {
+      color: var(--text-secondary);
+      font-weight: 500;
+    }
+
+    .progress-container {
+      margin-top: 12px;
+    }
+
+    .progress-bar-bg {
+      width: 100%;
+      height: 8px;
+      background: var(--bg-card);
+      border-radius: 4px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      background: linear-gradient(90deg, var(--accent), var(--cyan));
+      border-radius: 4px;
+      transition: width 0.5s ease;
+      position: relative;
+    }
+
+    .progress-bar-fill.active::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.2), transparent);
+      animation: shimmer 1.5s infinite;
+    }
+
+    @keyframes shimmer {
+      0% {
+        transform: translateX(-100%);
+      }
+
+      100% {
+        transform: translateX(100%);
+      }
+    }
+
+    .progress-info {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+    }
+
+    .progress-percent {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--accent);
+    }
+
+    .progress-current {
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-dim);
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    .ingest-status-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 500;
+      padding: 4px 10px;
+      border-radius: 20px;
+    }
+
+    .ingest-status-badge.running {
+      background: rgba(124, 92, 252, 0.15);
+      color: var(--accent);
+    }
+
+    .ingest-status-badge.idle {
+      background: rgba(52, 211, 153, 0.15);
+      color: var(--green);
+    }
+
+    .ingest-status-badge .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: currentColor;
+    }
+
+    .ingest-status-badge.running .dot {
+      animation: pulse 1s infinite;
+    }
+
+    @keyframes pulse {
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.3;
+      }
+    }
+
+    .concurrency-select {
+      padding: 8px 12px;
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      color: var(--text-primary);
+      font-size: 12px;
+      font-family: inherit;
+      min-width: 60px;
+    }
+
+    .concurrency-select:focus {
+      outline: none;
+      border-color: var(--accent);
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- Header -->
+  <header class="header">
+    <div class="logo">🧠 Knowledge Graph</div>
+    <div class="search-box">
+      <span class="search-icon">🔍</span>
+      <input id="searchInput" type="text" placeholder="검색어 입력... (⌘K)" autocomplete="off">
+    </div>
+    <div class="mode-toggle">
+      <button class="mode-btn active" data-mode="graph" onclick="setMode('graph')">그래프</button>
+      <button class="mode-btn" data-mode="chat" onclick="setMode('chat')">AI 채팅</button>
+    </div>
+  </header>
+
+  <!-- Main Layout -->
+  <main class="main">
+    <!-- Stats Bar -->
+    <div class="stats-bar">
+      <div class="stat-card">
+        <div class="stat-label">Nodes</div>
+        <div class="stat-value green" id="statNodes">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Edges</div>
+        <div class="stat-value amber" id="statEdges">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Entities</div>
+        <div class="stat-value cyan" id="statEntities">-</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-label">Episodes</div>
+        <div class="stat-value rose" id="statEpisodes">-</div>
+      </div>
+    </div>
+
+    <!-- Graph Area -->
+    <div class="graph-area" id="graphArea">
+      <svg id="graphSvg"></svg>
+      <div class="tooltip" id="tooltip">
+        <div class="tooltip-name" id="tooltipName"></div>
+        <div class="tooltip-summary" id="tooltipSummary"></div>
+      </div>
+      <div class="graph-controls">
+        <button onclick="zoomIn()" title="확대">+</button>
+        <button onclick="zoomOut()" title="축소">−</button>
+        <button onclick="resetZoom()" title="초기화">⟲</button>
+      </div>
+    </div>
+
+    <!-- Side Panel -->
+    <div class="side-panel">
+      <div class="panel-tabs">
+        <div class="panel-tab active" data-tab="results" onclick="switchTab('results')">🔍 결과</div>
+        <div class="panel-tab" data-tab="entities" onclick="switchTab('entities')">📋 엔티티</div>
+        <div class="panel-tab" data-tab="chat" onclick="switchTab('chat')">🤖 AI</div>
+        <div class="panel-tab" data-tab="settings" onclick="switchTab('settings')">⚙️ 설정</div>
+      </div>
+
+      <!-- Search Results / Entities tab content -->
+      <div class="panel-content" id="panelContent">
+        <div class="empty-state">
+          <div class="icon">🔍</div>
+          <p>검색어를 입력하면<br>관련 지식이 여기에 표시됩니다</p>
+        </div>
+      </div>
+
+      <!-- Chat tab content (hidden by default) -->
+      <div class="chat-container" id="chatContainer" style="display:none">
+        <div class="chat-messages" id="chatMessages">
+          <div class="chat-msg ai">
+            <div class="chat-bubble">
+              안녕하세요! 지식그래프를 기반으로 질문에 답변해 드립니다. 🧠<br>
+              무엇이 궁금하신가요?
+            </div>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <input id="chatInput" type="text" placeholder="질문을 입력하세요..." autocomplete="off">
+          <button class="chat-send-btn" id="chatSendBtn" onclick="sendChat()">➤</button>
+        </div>
+      </div>
+
+      <!-- Settings tab content (hidden by default) -->
+      <div class="panel-content" id="settingsPanel" style="display:none">
+        <!-- Vault Path -->
+        <div class="settings-section">
+          <h3>📂 Vault 경로</h3>
+          <div class="settings-row">
+            <input class="settings-input" id="vaultPathInput" type="text" placeholder="/path/to/obsidian/vault">
+            <button class="settings-btn primary" onclick="updateVaultPath()">적용</button>
+          </div>
+          <div class="vault-info" id="vaultInfo">로딩 중...</div>
+        </div>
+
+        <!-- Ingestion -->
+        <div class="settings-section">
+          <h3>📥 인제스트</h3>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+            <span id="ingestStatusBadge" class="ingest-status-badge idle"><span class="dot"></span>대기 중</span>
+          </div>
+          <div class="settings-row">
+            <label style="font-size:12px;color:var(--text-secondary);display:flex;align-items:center;gap:6px">워커:
+              <select class="concurrency-select" id="concurrencySelect">
+                <option value="1">1</option>
+                <option value="3">3</option>
+                <option value="5" selected>5</option>
+                <option value="8">8</option>
+                <option value="10">10</option>
+              </select>
+            </label>
+            <button class="settings-btn primary" id="ingestStartBtn" onclick="startIngest()">▶ 시작</button>
+            <button class="settings-btn danger" id="ingestStopBtn" onclick="stopIngest()" disabled>⏹ 중단</button>
+          </div>
+
+          <!-- Progress -->
+          <div class="progress-container" id="progressContainer" style="display:none">
+            <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px">
+              <span class="progress-percent" id="progressPercent">0%</span>
+              <span style="font-size:12px;color:var(--text-dim)" id="progressCount">0 / 0</span>
+            </div>
+            <div class="progress-bar-bg">
+              <div class="progress-bar-fill" id="progressBarFill" style="width:0%"></div>
+            </div>
+            <div class="progress-info">
+              <span id="progressSkipped" style="color:var(--text-dim)"></span>
+              <span id="progressErrors" style="color:var(--rose)"></span>
+              <span id="progressETA"></span>
+            </div>
+            <div class="progress-current" id="progressCurrent"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- Document Preview Modal -->
+  <div class="doc-modal-overlay" id="docModal" onclick="closeDocModal(event)">
+    <div class="doc-modal" onclick="event.stopPropagation()">
+      <div class="doc-modal-header">
+        <div>
+          <span class="doc-modal-title" id="docTitle"></span>
+          <span class="doc-modal-folder" id="docFolder"></span>
+        </div>
+        <button class="doc-modal-close" onclick="closeDocModal()">✕</button>
+      </div>
+      <div class="doc-modal-actions">
+        <a id="docObsidianLink" href="#" target="_blank">📝 Obsidian에서 열기</a>
+      </div>
+      <div class="doc-modal-body">
+        <div class="doc-content" id="docContent">로딩 중...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ── State ──────────────────────────────────────────────
+    let currentTab = 'results';
+    let currentMode = 'graph';
+    let graphData = { nodes: [], links: [] };
+    let simulation = null;
+    let zoomBehavior = null;
+    let searchResults = [];
+    let entities = [];
+    let chatHistory = [];
+
+    // ── API ────────────────────────────────────────────────
+    let ingestPollTimer = null;
+    let ingestStartTime = null;
+
+    const api = {
+      async stats() { return (await fetch('/api/stats')).json(); },
+      async search(q) { return (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json(); },
+      async graph(limit = 200) { return (await fetch(`/api/graph?limit=${limit}`)).json(); },
+      async entities(limit = 100) { return (await fetch(`/api/entities?limit=${limit}`)).json(); },
+      async chat(message, history) {
+        const r = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message, history }),
+        });
+        return r.json();
+      },
+      async document(path) { return (await fetch(`/api/document?path=${encodeURIComponent(path)}`)).json(); },
+      async vaultInfo() { return (await fetch('/api/vault/info')).json(); },
+      async vaultConfig(vaultPath) {
+        const r = await fetch('/api/vault/config', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ vault_path: vaultPath }),
+        });
+        return r.json();
+      },
+      async ingestStart(concurrency) {
+        const r = await fetch('/api/ingest/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ concurrency }),
+        });
+        return r.json();
+      },
+      async ingestStatus() { return (await fetch('/api/ingest/status')).json(); },
+      async ingestStop() {
+        const r = await fetch('/api/ingest/stop', { method: 'POST' });
+        return r.json();
+      },
+    };
+
+    // ── Init ───────────────────────────────────────────────
+    document.addEventListener('DOMContentLoaded', () => {
+      loadStats();
+      loadGraph();
+      loadEntities();
+      loadVaultInfo();
+      checkIngestStatus();
+
+      const searchInput = document.getElementById('searchInput');
+      searchInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && searchInput.value.trim()) {
+          performSearch(searchInput.value.trim());
+        }
+      });
+
+      const chatInput = document.getElementById('chatInput');
+      chatInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && chatInput.value.trim()) {
+          sendChat();
+        }
+      });
+
+      document.addEventListener('keydown', (e) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 'k') {
+          e.preventDefault();
+          searchInput.focus();
+          searchInput.select();
+        }
+        if (e.key === 'Escape') closeDocModal();
+      });
+    });
+
+    // ── Mode toggle (graph/chat) ───────────────────────────
+    function setMode(mode) {
+      currentMode = mode;
+      document.querySelectorAll('.mode-btn').forEach(b => {
+        b.classList.toggle('active', b.dataset.mode === mode);
+      });
+      if (mode === 'chat') {
+        switchTab('chat');
+      }
+    }
+
+    // ── Stats ──────────────────────────────────────────────
+    async function loadStats() {
+      try {
+        const data = await api.stats();
+        if (data.error) return;
+        animateNumber('statNodes', data.nodes || 0);
+        animateNumber('statEdges', data.edges || 0);
+        animateNumber('statEntities', data.labels?.Entity || 0);
+        animateNumber('statEpisodes', data.labels?.Episodic || 0);
+      } catch (e) { console.error('Stats error:', e); }
+    }
+
+    function animateNumber(id, target) {
+      const el = document.getElementById(id);
+      const dur = 600;
+      const start = performance.now();
+      const from = parseInt(el.textContent) || 0;
+      function tick(now) {
+        const p = Math.min((now - start) / dur, 1);
+        const ease = 1 - Math.pow(1 - p, 3);
+        el.textContent = Math.round(from + (target - from) * ease);
+        if (p < 1) requestAnimationFrame(tick);
+      }
+      requestAnimationFrame(tick);
+    }
+
+    // ── Search ─────────────────────────────────────────────
+    async function performSearch(query) {
+      switchTab('results');
+      const panel = document.getElementById('panelContent');
+      panel.innerHTML = '<div style="text-align:center;padding:40px"><div class="spinner"></div></div>';
+
+      try {
+        const data = await api.search(query);
+        searchResults = data.results || [];
+        renderSearchResults();
+      } catch (e) {
+        panel.innerHTML = '<div class="empty-state"><p>검색 실패</p></div>';
+      }
+    }
+
+    function renderSearchResults() {
+      const panel = document.getElementById('panelContent');
+      if (!searchResults.length) {
+        panel.innerHTML = '<div class="empty-state"><div class="icon">🤷</div><p>결과가 없습니다</p></div>';
+        return;
+      }
+      panel.innerHTML = searchResults.map((r, i) => {
+        const obsLink = r.obsidian_uri
+          ? `<a class="result-link" href="${esc(r.obsidian_uri)}" title="Obsidian에서 열기">📝 열기</a>`
+          : '';
+        const previewBtn = r.file_path
+          ? `<span class="result-link" onclick="openDocPreview('${esc(r.file_path)}', '${esc(r.obsidian_uri || '')}')">👁 미리보기</span>`
+          : '';
+        return `
+      <div class="result-card">
+        <div class="result-fact">
+          <span class="result-index">${i + 1}</span>
+          <span>${esc(r.fact || '')}</span>
+        </div>
+        <div class="result-meta">
+          ${r.vault_relative ? `<span class="result-source">📄 ${esc(r.vault_relative)}</span>` : ''}
+          ${obsLink}
+          ${previewBtn}
+        </div>
+      </div>
+    `;
+      }).join('');
+    }
+
+    // ── Document Preview Modal ─────────────────────────────
+    async function openDocPreview(filePath, obsidianUri) {
+      const modal = document.getElementById('docModal');
+      const title = document.getElementById('docTitle');
+      const folder = document.getElementById('docFolder');
+      const content = document.getElementById('docContent');
+      const obsLink = document.getElementById('docObsidianLink');
+
+      title.textContent = '로딩 중...';
+      folder.textContent = '';
+      content.textContent = '로딩 중...';
+      obsLink.href = obsidianUri || '#';
+      modal.classList.add('visible');
+
+      try {
+        const data = await api.document(filePath);
+        if (data.error) {
+          title.textContent = '오류';
+          content.textContent = data.error;
+          return;
+        }
+        title.textContent = data.title;
+        folder.textContent = `📁 ${data.folder}`;
+        content.textContent = data.content;
+      } catch (e) {
+        title.textContent = '오류';
+        content.textContent = '문서를 불러올 수 없습니다.';
+      }
+    }
+
+    function closeDocModal(event) {
+      if (event && event.target !== event.currentTarget) return;
+      document.getElementById('docModal').classList.remove('visible');
+    }
+
+    // ── AI Chat ────────────────────────────────────────────
+    async function sendChat() {
+      const input = document.getElementById('chatInput');
+      const msg = input.value.trim();
+      if (!msg) return;
+
+      input.value = '';
+      const sendBtn = document.getElementById('chatSendBtn');
+      sendBtn.disabled = true;
+
+      // Add user message
+      appendChatMsg('user', msg);
+      chatHistory.push({ role: 'user', content: msg });
+
+      // Show loading
+      const loadingId = appendChatMsg('ai', '<div class="spinner"></div>', true);
+
+      try {
+        const data = await api.chat(msg, chatHistory);
+
+        if (data.error) {
+          updateChatMsg(loadingId, `❌ ${data.error}`);
+        } else {
+          // Format answer with source links
+          let html = formatMarkdown(data.answer);
+
+          if (data.sources && data.sources.length) {
+            html += '<div class="chat-sources">📚 출처: ';
+            html += data.sources.map(s => {
+              if (s.obsidian_uri) {
+                return `<a class="chat-source-tag" href="${esc(s.obsidian_uri)}" title="${esc(s.fact || '')}">[${s.index}] ${esc(s.vault_relative || s.source)}</a>`;
+              }
+              return `<span class="chat-source-tag">[${s.index}] ${esc(s.source || '')}</span>`;
+            }).join('');
+            html += '</div>';
+          }
+
+          updateChatMsg(loadingId, html);
+          chatHistory.push({ role: 'assistant', content: data.answer });
+        }
+      } catch (e) {
+        updateChatMsg(loadingId, '❌ 응답 실패: ' + e.message);
+      }
+
+      sendBtn.disabled = false;
+    }
+
+    function appendChatMsg(role, content, isHtml = false) {
+      const container = document.getElementById('chatMessages');
+      const id = 'msg-' + Date.now();
+      const div = document.createElement('div');
+      div.className = `chat-msg ${role}`;
+      div.id = id;
+      div.innerHTML = `<div class="chat-bubble">${isHtml ? content : esc(content)}</div>`;
+      container.appendChild(div);
+      container.scrollTop = container.scrollHeight;
+      return id;
+    }
+
+    function updateChatMsg(id, html) {
+      const el = document.getElementById(id);
+      if (el) el.querySelector('.chat-bubble').innerHTML = html;
+      const container = document.getElementById('chatMessages');
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function formatMarkdown(text) {
+      return text
+        .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+        .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\[(\d+)\]/g, '<span style="color:var(--accent);font-weight:600">[$1]</span>')
+        .replace(/\n/g, '<br>');
+    }
+
+    // ── Entities ───────────────────────────────────────────
+    async function loadEntities() {
+      try {
+        const data = await api.entities();
+        if (!data.error) entities = data.entities || [];
+      } catch (e) { console.error('Entities error:', e); }
+    }
+
+    function renderEntities() {
+      const panel = document.getElementById('panelContent');
+      if (!entities.length) {
+        panel.innerHTML = '<div class="empty-state"><div class="icon">📋</div><p>엔티티가 없습니다</p></div>';
+        return;
+      }
+      panel.innerHTML = entities.map(e => `
+    <div class="entity-card" onclick="searchEntity('${esc(e.name || '')}')">
+      <div class="entity-dot"></div>
+      <div class="entity-name">${esc(e.name || '?')}</div>
+      <div class="entity-connections">${e.connections || 0}개 연결</div>
+    </div>
+  `).join('');
+    }
+
+    function searchEntity(name) {
+      document.getElementById('searchInput').value = name;
+      performSearch(name);
+    }
+
+    // ── Tabs ───────────────────────────────────────────────
+    function switchTab(tab) {
+      currentTab = tab;
+      document.querySelectorAll('.panel-tab').forEach(t => {
+        t.classList.toggle('active', t.dataset.tab === tab);
+      });
+
+      const panelContent = document.getElementById('panelContent');
+      const chatContainer = document.getElementById('chatContainer');
+      const settingsPanel = document.getElementById('settingsPanel');
+
+      panelContent.style.display = 'none';
+      chatContainer.style.display = 'none';
+      settingsPanel.style.display = 'none';
+
+      if (tab === 'chat') {
+        chatContainer.style.display = 'flex';
+        document.getElementById('chatInput').focus();
+      } else if (tab === 'settings') {
+        settingsPanel.style.display = 'block';
+        loadVaultInfo();
+      } else {
+        panelContent.style.display = 'block';
+        if (tab === 'results') renderSearchResults();
+        else if (tab === 'entities') renderEntities();
+      }
+    }
+
+    // ── Vault Info ─────────────────────────────────────────
+    async function loadVaultInfo() {
+      try {
+        const data = await api.vaultInfo();
+        document.getElementById('vaultPathInput').value = data.path || '';
+        const info = document.getElementById('vaultInfo');
+        if (data.exists) {
+          info.innerHTML = `📁 <span class="vault-stat">${data.vault_name}</span> — <span class="vault-stat">${data.note_count}</span>개 노트`;
+        } else {
+          info.innerHTML = `⚠️ 경로가 존재하지 않습니다`;
+        }
+      } catch (e) {
+        console.error('Vault info error:', e);
+      }
+    }
+
+    async function updateVaultPath() {
+      const newPath = document.getElementById('vaultPathInput').value.trim();
+      if (!newPath) return;
+      try {
+        const result = await api.vaultConfig(newPath);
+        if (result.error) {
+          alert(result.error);
+        } else {
+          loadVaultInfo();
+          loadStats();
+        }
+      } catch (e) {
+        alert('경로 업데이트 실패: ' + e.message);
+      }
+    }
+
+    // ── Ingestion ──────────────────────────────────────────
+    async function startIngest() {
+      const concurrency = parseInt(document.getElementById('concurrencySelect').value);
+      const btn = document.getElementById('ingestStartBtn');
+      btn.disabled = true;
+      try {
+        const result = await api.ingestStart(concurrency);
+        if (result.error) {
+          alert(result.error);
+          btn.disabled = false;
+          return;
+        }
+        ingestStartTime = Date.now();
+        document.getElementById('ingestStopBtn').disabled = false;
+        document.getElementById('concurrencySelect').disabled = true;
+        startProgressPolling();
+      } catch (e) {
+        alert('인제스트 시작 실패: ' + e.message);
+        btn.disabled = false;
+      }
+    }
+
+    async function stopIngest() {
+      try {
+        await api.ingestStop();
+        stopProgressPolling();
+        document.getElementById('ingestStartBtn').disabled = false;
+        document.getElementById('ingestStopBtn').disabled = true;
+        document.getElementById('concurrencySelect').disabled = false;
+      } catch (e) {
+        alert('중단 실패: ' + e.message);
+      }
+    }
+
+    async function checkIngestStatus() {
+      try {
+        const status = await api.ingestStatus();
+        if (status.running) {
+          ingestStartTime = ingestStartTime || Date.now();
+          document.getElementById('ingestStartBtn').disabled = true;
+          document.getElementById('ingestStopBtn').disabled = false;
+          document.getElementById('concurrencySelect').disabled = true;
+          startProgressPolling();
+        }
+        updateProgressUI(status);
+      } catch (e) {
+        console.error('Ingest status error:', e);
+      }
+    }
+
+    function updateProgressUI(status) {
+      const badge = document.getElementById('ingestStatusBadge');
+      const container = document.getElementById('progressContainer');
+      const barFill = document.getElementById('progressBarFill');
+
+      if (status.running || status.completed > 0) {
+        container.style.display = 'block';
+        barFill.style.width = status.percent + '%';
+        barFill.classList.toggle('active', status.running);
+        document.getElementById('progressPercent').textContent = status.percent + '%';
+        document.getElementById('progressCount').textContent = `${status.completed + status.skipped} / ${status.total}`;
+        document.getElementById('progressSkipped').textContent = status.skipped > 0 ? `이미 존재: ${status.skipped}` : '';
+        document.getElementById('progressErrors').textContent = status.errors > 0 ? `⚠ ${status.errors} 오류` : '';
+        document.getElementById('progressCurrent').textContent = status.current_note ? `📄 ${status.current_note}` : '';
+
+        // ETA
+        if (status.running && status.completed > 0 && ingestStartTime) {
+          const elapsed = (Date.now() - ingestStartTime) / 1000;
+          const rate = status.completed / elapsed;
+          const remaining = (status.total - status.completed) / rate;
+          const mins = Math.ceil(remaining / 60);
+          document.getElementById('progressETA').textContent = `약 ${mins}분 남음`;
+        } else if (!status.running) {
+          document.getElementById('progressETA').textContent = status.completed >= status.total ? '✅ 완료' : '⏸ 중단됨';
+        }
+      }
+
+      if (status.running) {
+        badge.className = 'ingest-status-badge running';
+        badge.innerHTML = '<span class="dot"></span>실행 중';
+      } else {
+        badge.className = 'ingest-status-badge idle';
+        badge.innerHTML = '<span class="dot"></span>대기 중';
+        if (status.completed >= status.total && status.total > 0) {
+          badge.innerHTML = '<span class="dot"></span>완료 ✅';
+        }
+      }
+    }
+
+    function startProgressPolling() {
+      stopProgressPolling();
+      async function poll() {
+        try {
+          const status = await api.ingestStatus();
+          updateProgressUI(status);
+          if (status.running) {
+            loadStats(); // refresh stats too
+          } else {
+            stopProgressPolling();
+            document.getElementById('ingestStartBtn').disabled = false;
+            document.getElementById('ingestStopBtn').disabled = true;
+            document.getElementById('concurrencySelect').disabled = false;
+            loadStats();
+            loadGraph();
+          }
+        } catch (e) { console.error('Poll error:', e); }
+      }
+      poll();
+      ingestPollTimer = setInterval(poll, 2000);
+    }
+
+    function stopProgressPolling() {
+      if (ingestPollTimer) {
+        clearInterval(ingestPollTimer);
+        ingestPollTimer = null;
+      }
+    }
+
+    // ── Graph ──────────────────────────────────────────────
+    async function loadGraph() {
+      try {
+        graphData = await api.graph();
+        if (!graphData.error) renderGraph();
+      } catch (e) { console.error('Graph error:', e); }
+    }
+
+    function renderGraph() {
+      const container = document.getElementById('graphArea');
+      const svg = d3.select('#graphSvg');
+      svg.selectAll('*').remove();
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+
+      const color = d3.scaleOrdinal()
+        .domain(['Entity', 'Episodic', 'Community'])
+        .range(['#7c5cfc', '#22d3ee', '#fbbf24']);
+
+      const g = svg.append('g');
+      zoomBehavior = d3.zoom()
+        .scaleExtent([0.1, 4])
+        .on('zoom', (event) => g.attr('transform', event.transform));
+      svg.call(zoomBehavior);
+
+      const link = g.append('g')
+        .selectAll('line')
+        .data(graphData.links)
+        .join('line')
+        .attr('stroke', '#2a2a42')
+        .attr('stroke-width', 1)
+        .attr('stroke-opacity', 0.6);
+
+      const node = g.append('g')
+        .selectAll('circle')
+        .data(graphData.nodes)
+        .join('circle')
+        .attr('r', d => {
+          const c = graphData.links.filter(
+            l => l.source === d.id || l.target === d.id ||
+              l.source?.id === d.id || l.target?.id === d.id
+          ).length;
+          return Math.max(5, Math.min(16, 4 + c * 1.5));
+        })
+        .attr('fill', d => color(d.group))
+        .attr('stroke', '#0a0a0f')
+        .attr('stroke-width', 1.5)
+        .style('cursor', 'pointer')
+        .call(d3.drag()
+          .on('start', dragstarted)
+          .on('drag', dragged)
+          .on('end', dragended)
+        );
+
+      const labels = g.append('g')
+        .selectAll('text')
+        .data(graphData.nodes)
+        .join('text')
+        .text(d => {
+          const name = d.name || '';
+          return name.length > 12 ? name.slice(0, 12) + '…' : name;
+        })
+        .attr('font-size', 9)
+        .attr('fill', '#9090a8')
+        .attr('text-anchor', 'middle')
+        .attr('dy', -10)
+        .style('pointer-events', 'none')
+        .style('user-select', 'none');
+
+      const tooltip = document.getElementById('tooltip');
+      const tooltipName = document.getElementById('tooltipName');
+      const tooltipSummary = document.getElementById('tooltipSummary');
+
+      node.on('mouseover', (event, d) => {
+        tooltipName.textContent = d.name || '?';
+        tooltipSummary.textContent = d.summary || '(요약 없음)';
+        tooltip.classList.add('visible');
+        tooltip.style.left = event.pageX + 12 + 'px';
+        tooltip.style.top = event.pageY - 12 + 'px';
+        node.attr('opacity', n => {
+          if (n.id === d.id) return 1;
+          const connected = graphData.links.some(
+            l => (l.source?.id || l.source) === d.id && (l.target?.id || l.target) === n.id ||
+              (l.target?.id || l.target) === d.id && (l.source?.id || l.source) === n.id
+          );
+          return connected ? 1 : 0.15;
+        });
+        link.attr('stroke-opacity', l =>
+          (l.source?.id || l.source) === d.id || (l.target?.id || l.target) === d.id ? 0.8 : 0.05
+        ).attr('stroke', l =>
+          (l.source?.id || l.source) === d.id || (l.target?.id || l.target) === d.id ? '#7c5cfc' : '#2a2a42'
+        );
+        labels.attr('opacity', n => {
+          if (n.id === d.id) return 1;
+          const connected = graphData.links.some(
+            l => (l.source?.id || l.source) === d.id && (l.target?.id || l.target) === n.id ||
+              (l.target?.id || l.target) === d.id && (l.source?.id || l.source) === n.id
+          );
+          return connected ? 1 : 0.1;
+        });
+      })
+        .on('mousemove', (event) => {
+          tooltip.style.left = event.pageX + 12 + 'px';
+          tooltip.style.top = event.pageY - 12 + 'px';
+        })
+        .on('mouseout', () => {
+          tooltip.classList.remove('visible');
+          node.attr('opacity', 1);
+          link.attr('stroke-opacity', 0.6).attr('stroke', '#2a2a42');
+          labels.attr('opacity', 1);
+        })
+        .on('click', (event, d) => {
+          document.getElementById('searchInput').value = d.name || '';
+          performSearch(d.name || '');
+        });
+
+      simulation = d3.forceSimulation(graphData.nodes)
+        .force('link', d3.forceLink(graphData.links).id(d => d.id).distance(80))
+        .force('charge', d3.forceManyBody().strength(-120))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force('collision', d3.forceCollide().radius(18))
+        .on('tick', () => {
+          link.attr('x1', d => d.source.x).attr('y1', d => d.source.y)
+            .attr('x2', d => d.target.x).attr('y2', d => d.target.y);
+          node.attr('cx', d => d.x).attr('cy', d => d.y);
+          labels.attr('x', d => d.x).attr('y', d => d.y);
+        });
+
+      function dragstarted(event, d) {
+        if (!event.active) simulation.alphaTarget(0.3).restart();
+        d.fx = d.x; d.fy = d.y;
+      }
+      function dragged(event, d) { d.fx = event.x; d.fy = event.y; }
+      function dragended(event, d) {
+        if (!event.active) simulation.alphaTarget(0);
+        d.fx = null; d.fy = null;
+      }
+    }
+
+    function zoomIn() { d3.select('#graphSvg').transition().call(zoomBehavior.scaleBy, 1.3); }
+    function zoomOut() { d3.select('#graphSvg').transition().call(zoomBehavior.scaleBy, 0.7); }
+    function resetZoom() { d3.select('#graphSvg').transition().call(zoomBehavior.transform, d3.zoomIdentity); }
+
+    // ── Utils ──────────────────────────────────────────────
+    function esc(s) {
+      const div = document.createElement('div');
+      div.textContent = s || '';
+      return div.innerHTML;
+    }
+
+    window.addEventListener('resize', () => {
+      if (graphData.nodes?.length) renderGraph();
+    });
+  </script>
+
+</body>
+
+</html>

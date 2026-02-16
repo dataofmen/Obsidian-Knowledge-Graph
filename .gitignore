@@ -1,0 +1,19 @@
+# Dependencies
+.venv/
+__pycache__/
+*.egg-info/
+
+# Environment
+.env
+
+# Neo4j
+neo4j_data/
+neo4j_logs/
+
+# IDE
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
