@@ -362,7 +362,7 @@ async def api_chat(req: ChatRequest):
         # 4. Call LLM via OpenAI-compatible API
         import httpx
 
-        async with httpx.AsyncClient(timeout=60) as client:
+        async with httpx.AsyncClient(timeout=180) as client:
             resp = await client.post(
                 f"{provider.base_url}/chat/completions",
                 headers={

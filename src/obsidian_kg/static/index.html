@@ -1307,7 +1307,12 @@
       chatHistory.push({ role: 'user', content: msg });
 
       // Show loading
-      const loadingId = appendChatMsg('ai', '<div class="spinner"></div>', true);
+      const loadingId = appendChatMsg('ai', `
+        <div style="display:flex;align-items:center;gap:10px;color:var(--text-dim);font-size:12px">
+          <div class="spinner"></div>
+          지식그래프 탐색 및 응답 생성 중... (최대 3분 소요될 수 있음)
+        </div>
+      `, true);
 
       try {
         const data = await api.chat(msg, chatHistory);
@@ -1333,10 +1338,11 @@
           chatHistory.push({ role: 'assistant', content: data.answer });
         }
       } catch (e) {
-        updateChatMsg(loadingId, '❌ 응답 실패: ' + e.message);
+        console.error('Chat terminal error:', e);
+        updateChatMsg(loadingId, `❌ 응답 실패: ${e.message || '네트워크 오류'}`);
+      } finally {
+        sendBtn.disabled = false;
       }
-
-      sendBtn.disabled = false;
     }
 
     function appendChatMsg(role, content, isHtml = false) {
