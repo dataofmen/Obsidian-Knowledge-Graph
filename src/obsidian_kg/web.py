@@ -109,48 +109,68 @@ def _run_neo4j_stats(config: Config) -> dict:
 
 
 def _run_neo4j_graph(config: Config, limit: int) -> dict:
-    """Run graph query synchronously."""
+    """Run graph query synchronously, fetching recent edges and their nodes."""
     driver = _get_neo4j_driver(config)
     try:
         with driver.session() as session:
-            nodes_data = session.run(
-                "MATCH (n:Entity) "
-                "RETURN n.uuid AS id, n.name AS name, "
-                "n.summary AS summary, labels(n) AS labels "
-                "ORDER BY n.created_at DESC LIMIT $limit",
+            # Fetch recent RELATES_TO edges and the nodes they connect
+            results = session.run(
+                "MATCH (a:Entity)-[r:RELATES_TO]->(b:Entity) "
+                "WHERE r.expired_at IS NULL "
+                "RETURN a.uuid AS a_id, a.name AS a_name, a.summary AS a_summary, labels(a) AS a_labels, "
+                "b.uuid AS b_id, b.name AS b_name, b.summary AS b_summary, labels(b) AS b_labels, "
+                "r.name AS r_label, r.fact AS r_fact "
+                "ORDER BY r.created_at DESC LIMIT $limit",
                 limit=limit,
             ).data()
 
-            edges_data = session.run(
-                "MATCH (a:Entity)-[r:RELATES_TO]->(b:Entity) "
-                "WHERE r.expired_at IS NULL "
-                "RETURN a.uuid AS source, b.uuid AS target, "
-                "r.name AS label, r.fact AS fact "
-                "LIMIT $limit",
-                limit=limit * 3,
-            ).data()
+        nodes_map = {}
+        links = []
 
-        node_ids = {n["id"] for n in nodes_data}
-        nodes = [
-            {
-                "id": n["id"],
-                "name": n["name"] or "?",
-                "summary": n["summary"] or "",
-                "group": n["labels"][0] if n["labels"] else "Entity",
-            }
-            for n in nodes_data
-        ]
-        links = [
-            {
-                "source": e["source"],
-                "target": e["target"],
-                "label": e["label"] or "",
-                "fact": e["fact"] or "",
-            }
-            for e in edges_data
-            if e["source"] in node_ids and e["target"] in node_ids
-        ]
-        return {"nodes": nodes, "links": links}
+        for row in results:
+            # Add source node
+            if row["a_id"] not in nodes_map:
+                nodes_map[row["a_id"]] = {
+                    "id": row["a_id"],
+                    "name": row["a_name"] or "?",
+                    "summary": row["a_summary"] or "",
+                    "group": row["a_labels"][0] if row["a_labels"] else "Entity",
+                }
+            # Add target node
+            if row["b_id"] not in nodes_map:
+                nodes_map[row["b_id"]] = {
+                    "id": row["b_id"],
+                    "name": row["b_name"] or "?",
+                    "summary": row["b_summary"] or "",
+                    "group": row["b_labels"][0] if row["b_labels"] else "Entity",
+                }
+            # Add link
+            links.append({
+                "source": row["a_id"],
+                "target": row["b_id"],
+                "label": row["r_label"] or "",
+                "fact": row["r_fact"] or "",
+            })
+
+        # Fallback: if no edges, just get some nodes
+        if not links:
+            nodes_data = session.run(
+                "MATCH (n:Entity) RETURN n.uuid AS id, n.name AS name, "
+                "n.summary AS summary, labels(n) AS labels LIMIT $limit",
+                limit=limit
+            ).data()
+            nodes = [
+                {
+                    "id": n["id"],
+                    "name": n["name"] or "?",
+                    "summary": n["summary"] or "",
+                    "group": n["labels"][0] if n["labels"] else "Entity",
+                }
+                for n in nodes_data
+            ]
+            return {"nodes": nodes, "links": []}
+
+        return {"nodes": list(nodes_map.values()), "links": links}
     finally:
         driver.close()
 
