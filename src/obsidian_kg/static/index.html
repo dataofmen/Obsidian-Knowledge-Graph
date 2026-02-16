@@ -1102,7 +1102,11 @@
     const api = {
       async stats() { return (await fetch('/api/stats')).json(); },
       async search(q) { return (await fetch(`/api/search?q=${encodeURIComponent(q)}`)).json(); },
-      async graph(limit = 200) { return (await fetch(`/api/graph?limit=${limit}`)).json(); },
+      async graph(limit = 200, focus = null) {
+        let url = `/api/graph?limit=${limit}`;
+        if (focus) url += `&focus=${encodeURIComponent(focus)}`;
+        return (await fetch(url)).json();
+      },
       async entities(limit = 100) { return (await fetch(`/api/entities?limit=${limit}`)).json(); },
       async chat(message, history) {
         const r = await fetch('/api/chat', {
@@ -1374,7 +1378,7 @@
         return;
       }
       panel.innerHTML = entities.map(e => `
-    <div class="entity-card" onclick="searchEntity('${esc(e.name || '')}')">
+    <div class="entity-card" onclick="focusNodeByName('${esc(e.name || '')}')">
       <div class="entity-dot"></div>
       <div class="entity-name">${esc(e.name || '?')}</div>
       <div class="entity-connections">${e.connections || 0}개 연결</div>
@@ -1566,11 +1570,64 @@
     }
 
     // ── Graph ──────────────────────────────────────────────
-    async function loadGraph() {
+    async function loadGraph(focus = null) {
       try {
-        graphData = await api.graph();
-        if (!graphData.error) renderGraph();
+        graphData = await api.graph(200, focus);
+        if (!graphData.error) {
+          renderGraph();
+          if (focus) {
+            // Wait slightly for simulation to start
+            setTimeout(() => focusNodeByName(focus, true), 100);
+          }
+        }
       } catch (e) { console.error('Graph error:', e); }
+    }
+
+    function focusNodeByName(name, isRetry = false) {
+      const targetNode = graphData.nodes.find(n => n.name === name);
+      if (targetNode) {
+        // Ensure we are in graph mode
+        setMode('graph');
+
+        const svg = d3.select('#graphSvg');
+        const container = document.getElementById('graphArea');
+        const width = container.clientWidth;
+        const height = container.clientHeight;
+
+        // Position simulation might not be complete, so we use current coordinates
+        const x = targetNode.x || width / 2;
+        const y = targetNode.y || height / 2;
+
+        const transform = d3.zoomIdentity
+          .translate(width / 2, height / 2)
+          .scale(1.5)
+          .translate(-x, -y);
+
+        svg.transition().duration(1000).call(zoomBehavior.transform, transform);
+
+        // Visual feedback: brief highlight
+        d3.selectAll('circle')
+          .filter(d => d.id === targetNode.id)
+          .transition()
+          .duration(300)
+          .attr('r', 25)
+          .attr('stroke', '#fff')
+          .attr('stroke-width', 3)
+          .transition()
+          .duration(700)
+          .attr('r', d => {
+            const c = graphData.links.filter(
+              l => l.source === d.id || l.target === d.id ||
+                l.source?.id === d.id || l.target?.id === d.id
+            ).length;
+            return Math.max(5, Math.min(16, 4 + c * 1.5));
+          })
+          .attr('stroke', '#0a0a0f')
+          .attr('stroke-width', 1.5);
+      } else if (!isRetry) {
+        // If not in current view, reload graph focused on this entity
+        loadGraph(name);
+      }
     }
 
     function renderGraph() {

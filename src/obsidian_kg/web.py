@@ -108,21 +108,34 @@ def _run_neo4j_stats(config: Config) -> dict:
         driver.close()
 
 
-def _run_neo4j_graph(config: Config, limit: int) -> dict:
-    """Run graph query synchronously, fetching recent edges and their nodes."""
+def _run_neo4j_graph(config: Config, limit: int, focus: str | None = None) -> dict:
+    """Run graph query synchronously, optionally focusing on a specific node."""
     driver = _get_neo4j_driver(config)
     try:
         with driver.session() as session:
-            # Fetch recent RELATES_TO edges and the nodes they connect
-            results = session.run(
-                "MATCH (a:Entity)-[r:RELATES_TO]->(b:Entity) "
-                "WHERE r.expired_at IS NULL "
-                "RETURN a.uuid AS a_id, a.name AS a_name, a.summary AS a_summary, labels(a) AS a_labels, "
-                "b.uuid AS b_id, b.name AS b_name, b.summary AS b_summary, labels(b) AS b_labels, "
-                "r.name AS r_label, r.fact AS r_fact "
-                "ORDER BY r.created_at DESC LIMIT $limit",
-                limit=limit,
-            ).data()
+            if focus:
+                # Fetch node by name AND its direct relationships
+                results = session.run(
+                    "MATCH (a:Entity {name: $focus})-[r:RELATES_TO]-(b:Entity) "
+                    "WHERE r.expired_at IS NULL "
+                    "RETURN a.uuid AS a_id, a.name AS a_name, a.summary AS a_summary, labels(a) AS a_labels, "
+                    "b.uuid AS b_id, b.name AS b_name, b.summary AS b_summary, labels(b) AS b_labels, "
+                    "r.name AS r_label, r.fact AS r_fact, r.created_at AS r_created_at "
+                    "ORDER BY r.created_at DESC LIMIT $limit",
+                    focus=focus,
+                    limit=limit,
+                ).data()
+            else:
+                # Fetch recent RELATES_TO edges and the nodes they connect
+                results = session.run(
+                    "MATCH (a:Entity)-[r:RELATES_TO]->(b:Entity) "
+                    "WHERE r.expired_at IS NULL "
+                    "RETURN a.uuid AS a_id, a.name AS a_name, a.summary AS a_summary, labels(a) AS a_labels, "
+                    "b.uuid AS b_id, b.name AS b_name, b.summary AS b_summary, labels(b) AS b_labels, "
+                    "r.name AS r_label, r.fact AS r_fact, r.created_at AS r_created_at "
+                    "ORDER BY r.created_at DESC LIMIT $limit",
+                    limit=limit,
+                ).data()
 
         nodes_map = {}
         links = []
@@ -250,11 +263,14 @@ async def api_search(
 
 # ── API: Graph data (D3.js format) ────────────────────────
 @app.get("/api/graph")
-async def api_graph(limit: int = Query(200, ge=10, le=1000)):
+async def api_graph(
+    limit: int = Query(200, ge=10, le=1000),
+    focus: str | None = Query(None, description="Entity name to center graph around")
+):
     """Return nodes and edges for D3.js force graph visualization."""
     config: Config = app.state.config
     try:
-        data = await asyncio.to_thread(_run_neo4j_graph, config, limit)
+        data = await asyncio.to_thread(_run_neo4j_graph, config, limit, focus)
         return data
     except Exception as e:
         logger.error("Graph API error: %s", e)
